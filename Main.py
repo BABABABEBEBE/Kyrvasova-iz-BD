@@ -1,68 +1,78 @@
-import types
-
 import requests
 import mysql.connector
-from pprint import pprint
 import json
 
 
-class obj:
-
-    # constructor
+class Obj:
     def __init__(self, dict1):
         self.__dict__.update(dict1)
 
-if __name__ == '__main__':
+
+def fetch_data(url):
+    response = requests.get(url)
+    return json.loads(json.dumps(response.json()), object_hook=Obj)
+
+
+def insert_user(cursor, user_data):
+    sql = "INSERT INTO user (name, email, reg_data) VALUES (%s, %s, %s)"
+    email = user_data.email if user_data.email else "This user doesn't have an email"
+    reg_data = user_data.created_at[:10]  # Trim timestamp
+    cursor.execute(sql, (user_data.login, email, reg_data))
+
+
+def insert_repository(cursor, repository):
+    sql = "INSERT INTO repository (name, description, cr_data) VALUES (%s, %s, %s)"
+    description = repository.description if repository.description else "No description"
+    cr_data = repository.created_at[:10]
+    cursor.execute(sql, (repository.name, description, cr_data))
+
+
+def insert_branch(cursor, branch):
+    sql = "INSERT INTO branch (name, protected) VALUES (%s, %s)"
+    cursor.execute(sql, (branch.name, branch.protected))
+
+
+def insert_file(cursor, file):
+    sql = "INSERT INTO file (name, size, path, type) VALUES (%s, %s, %s, %s)"
+    cursor.execute(sql, (file.name, file.size, file.path, file.type))
+
+
+def main():
     username = "BABABABEBEBE"
-    url = f"https://api.github.com/users/{username}"
-    user_data_json = requests.get(url).json()
-    user_data = json.loads(json.dumps(user_data_json), object_hook=obj)
-    # pprint(user_data)
 
-    url_rep = "https://api.github.com/users/BABABABEBEBE/repos"
-    repository_data_json = requests.get(url_rep).json()
-    repository_data = json.loads(json.dumps(repository_data_json), object_hook=obj)
-
-
+    # Database connection
     mydb = mysql.connector.connect(
         host="localhost",
         user="root",
         password="1401vasil",
         database="lab2"
     )
+    cursor = mydb.cursor()
 
-    print(mydb)
+    # Fetch and insert user data
+    user_data = fetch_data(f"https://api.github.com/users/{username}")
+    insert_user(cursor, user_data)
 
-    mycursor = mydb.cursor()
-    sql_user = "INSERT INTO user (name, email, reg_data) VALUES (%s, %s, %s )"
-    if user_data.email is None:
-        user_data.email = "This user doesnt have email"
-    user_data.created_at = user_data.created_at[:-10]
-    val_user = (user_data.login, user_data.email, user_data.created_at)
-    mycursor.execute(sql_user, val_user)
+    # Fetch and insert repositories
+    repositories = fetch_data(f"https://api.github.com/users/{username}/repos")
+    for repository in repositories:
+        insert_repository(cursor, repository)
+
+        # Fetch and insert branches
+        branches = fetch_data(f"https://api.github.com/repos/{username}/{repository.name}/branches")
+        for branch in branches:
+            insert_branch(cursor, branch)
+
+            # Fetch and insert files
+            files = fetch_data(f"https://api.github.com/repos/{username}/{repository.name}/contents/?ref={branch.name}")
+            for file in files:
+                insert_file(cursor, file)
+
+    # Commit all changes and close connection
     mydb.commit()
+    cursor.close()
+    mydb.close()
 
-    for repository in repository_data:
-        sql_repository = "INSERT INTO repository ( name, description, cr_data) VALUES (%s, %s, %s )"
-        if repository.description is None:
-            repository.description = "This repository doesnt have description"
-        repository.created_at = repository.created_at[:-10]
-        val_repository = (repository.name, repository.description, repository.created_at)
-        url_branch = f"https://api.github.com/repos/{username}/{repository.name}/branches"
-        branch_data_json = requests.get(url_branch).json()
-        branch_data = json.loads(json.dumps(branch_data_json), object_hook=obj)
-        mycursor.execute(sql_repository, val_repository)
-        mydb.commit()
-        for branch in branch_data:
-            sql_branch = "INSERT INTO branch ( name, protected) VALUES (%s, %s )"
-            val_branch = (branch.name, branch.protected)
-            mycursor.execute(sql_branch, val_branch)
-            mydb.commit()
-            url_file = f"https://api.github.com/repos/{username}/{repository.name}/contents/?ref={branch.name}"
-            file_data_json = requests.get(url_file).json()
-            file_data = json.loads(json.dumps(file_data_json), object_hook=obj)
-            for file in file_data:
-                sql_file = "INSERT INTO file ( name, size, path, type) VALUES (%s, %s, %s, %s)"
-                val_file = (file.name, file.size,file.path,file.type)
-                mycursor.execute(sql_file, val_file)
-                mydb.commit()
+
+if __name__ == "__main__":
+    main()
