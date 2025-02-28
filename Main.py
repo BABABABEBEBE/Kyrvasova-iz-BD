@@ -3,16 +3,17 @@ import mysql.connector
 import json
 import logging
 from contextlib import closing
+from typing import List, Dict, Any
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class Obj:
-    def __init__(self, dict1):
+    def __init__(self, dict1: Dict[str, Any]):
         self.__dict__.update(dict1)
 
 
-def fetch_data(url):
+def fetch_data(url: str) -> List[Obj]:
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -22,7 +23,7 @@ def fetch_data(url):
         return []
 
 
-def execute_query(cursor, sql, values):
+def execute_query(cursor, sql: str, values: tuple):
     try:
         cursor.execute(sql, values)
         logging.info(f"Executed query: {sql} with values {values}")
@@ -30,26 +31,26 @@ def execute_query(cursor, sql, values):
         logging.error(f"Database error: {err}")
 
 
-def insert_user(cursor, user_data):
+def insert_user(cursor, user_data: Obj):
     sql = "INSERT INTO user (name, email, reg_data) VALUES (%s, %s, %s)"
     email = user_data.email if user_data.email else "This user doesn't have an email"
     reg_data = user_data.created_at[:10]
     execute_query(cursor, sql, (user_data.login, email, reg_data))
 
 
-def insert_repository(cursor, repository):
+def insert_repository(cursor, repository: Obj):
     sql = "INSERT INTO repository (name, description, cr_data) VALUES (%s, %s, %s)"
     description = repository.description if repository.description else "No description"
     cr_data = repository.created_at[:10]
     execute_query(cursor, sql, (repository.name, description, cr_data))
 
 
-def insert_branch(cursor, branch):
+def insert_branch(cursor, branch: Obj):
     sql = "INSERT INTO branch (name, protected) VALUES (%s, %s)"
     execute_query(cursor, sql, (branch.name, branch.protected))
 
 
-def insert_file(cursor, file):
+def insert_file(cursor, file: Obj):
     sql = "INSERT INTO file (name, size, path, type) VALUES (%s, %s, %s, %s)"
     execute_query(cursor, sql, (file.name, file.size, file.path, file.type))
 
@@ -61,7 +62,8 @@ def main():
         "host": "localhost",
         "user": "root",
         "password": "1401vasil",
-        "database": "lab2"
+        "database": "lab2",
+        "autocommit": True
     }
 
     try:
@@ -85,8 +87,7 @@ def main():
                     for file in files:
                         insert_file(cursor, file)
 
-            mydb.commit()
-            logging.info("Database changes committed")
+            logging.info("Database operations completed successfully")
     except mysql.connector.Error as err:
         logging.error(f"Database connection error: {err}")
 
